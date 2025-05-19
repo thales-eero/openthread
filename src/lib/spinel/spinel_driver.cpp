@@ -166,13 +166,16 @@ exit:
 
 void SpinelDriver::Process(const void *aContext)
 {
+    LogWarn("@@@ 14-1");
     if (mRxFrameBuffer.HasSavedFrame())
     {
         ProcessFrameQueue();
     }
 
+    LogWarn("@@@ 14-2");
     mSpinelInterface->Process(aContext);
 
+    LogWarn("@@@ 14-3");
     if (mRxFrameBuffer.HasSavedFrame())
     {
         ProcessFrameQueue();
@@ -279,6 +282,7 @@ void SpinelDriver::HandleReceivedFrame(void)
     bool           shouldSave = true;
     spinel_iid_t   iid;
 
+    LogWarn("@@@ 6-1");
     LogSpinelFrame(mRxFrameBuffer.GetFrame(), mRxFrameBuffer.GetLength(), false);
     unpacked = spinel_datatype_unpack(mRxFrameBuffer.GetFrame(), mRxFrameBuffer.GetLength(), "C", &header);
 
@@ -287,11 +291,13 @@ void SpinelDriver::HandleReceivedFrame(void)
 
     if (!mIidList.Contains(iid))
     {
+        LogWarn("@@@ 6-2");
         mRxFrameBuffer.DiscardFrame();
         ExitNow();
     }
 
     VerifyOrExit(unpacked > 0 && (header & SPINEL_HEADER_FLAG) == SPINEL_HEADER_FLAG, error = OT_ERROR_PARSE);
+    LogWarn("@@@ 6-3");
 
     assert(mReceivedFrameHandler != nullptr && mFrameHandlerContext != nullptr);
     mReceivedFrameHandler(mRxFrameBuffer.GetFrame(), mRxFrameBuffer.GetLength(), header, shouldSave,
@@ -299,14 +305,17 @@ void SpinelDriver::HandleReceivedFrame(void)
 
     if (shouldSave)
     {
+        LogWarn("@@@ 6-4");
         error = mRxFrameBuffer.SaveFrame();
     }
     else
     {
+        LogWarn("@@@ 6-5");
         mRxFrameBuffer.DiscardFrame();
     }
 
 exit:
+    LogWarn("@@@ 6-6 error=%d", (int)error);
     if (error != OT_ERROR_NONE)
     {
         mRxFrameBuffer.DiscardFrame();
@@ -334,6 +343,7 @@ void SpinelDriver::HandleInitialFrame(const uint8_t *aFrame, uint16_t aLength, u
     spinel_ssize_t    unpacked;
     otError           error = OT_ERROR_NONE;
 
+    LogWarn("@@@7-1");
     OT_UNUSED_VARIABLE(aHeader);
 
     rval = spinel_datatype_unpack(aFrame, aLength, "CiiD", &header, &cmd, &key, &data, &len);

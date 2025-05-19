@@ -333,10 +333,13 @@ void RadioSpinel::HandleNotification(const uint8_t *aFrame, uint16_t aLength, bo
 
     aShouldSaveFrame = false;
 
+    LogWarn("@@@ 9-1");
     unpacked = spinel_datatype_unpack(aFrame, aLength, "CiiD", &header, &cmd, &key, &data, &len);
 
     VerifyOrExit(unpacked > 0, error = OT_ERROR_PARSE);
+    LogWarn("@@@ 9-2");
     VerifyOrExit(SPINEL_HEADER_GET_TID(header) == 0, error = OT_ERROR_PARSE);
+    LogWarn("@@@ 9-3");
 
     switch (cmd)
     {
@@ -345,11 +348,14 @@ void RadioSpinel::HandleNotification(const uint8_t *aFrame, uint16_t aLength, bo
         // `mWaitingTid` is released immediately after received the response. And `mWaitingKey` is be set
         // to `SPINEL_PROP_LAST_STATUS` at the end of `WaitResponse()`.
 
+        LogWarn("@@@ 9-4");
         if (!IsSafeToHandleNow(key))
         {
+            LogWarn("@@@ 9-5");
             ExitNow(aShouldSaveFrame = true);
         }
 
+        LogWarn("@@@ 9-6");
         HandleValueIs(key, data, static_cast<uint16_t>(len));
         break;
 
@@ -359,6 +365,7 @@ void RadioSpinel::HandleNotification(const uint8_t *aFrame, uint16_t aLength, bo
         break;
 
     default:
+        LogWarn("@@@ 9-7");
         ExitNow(error = OT_ERROR_PARSE);
     }
 
@@ -399,20 +406,25 @@ void RadioSpinel::HandleResponse(const uint8_t *aBuffer, uint16_t aLength)
     spinel_ssize_t    rval   = 0;
     otError           error  = OT_ERROR_NONE;
 
+    LogWarn("@@@ 10-1");
     rval = spinel_datatype_unpack(aBuffer, aLength, "CiiD", &header, &cmd, &key, &data, &len);
     VerifyOrExit(rval > 0 && cmd >= SPINEL_CMD_PROP_VALUE_IS && cmd <= SPINEL_CMD_PROP_VALUE_REMOVED,
                  error = OT_ERROR_PARSE);
+    LogWarn("@@@ 10-2");
 
     if (mWaitingTid == SPINEL_HEADER_GET_TID(header))
     {
+        LogWarn("@@@ 10-3");
         HandleWaitingResponse(cmd, key, data, static_cast<uint16_t>(len));
         FreeTid(mWaitingTid);
         mWaitingTid = 0;
     }
     else if (mTxRadioTid == SPINEL_HEADER_GET_TID(header))
     {
+        LogWarn("@@@ 10-4");
         if (mState == kStateTransmitting)
         {
+            LogWarn("@@@ 10-5");
             HandleTransmitDone(cmd, key, data, static_cast<uint16_t>(len));
         }
 
@@ -421,11 +433,13 @@ void RadioSpinel::HandleResponse(const uint8_t *aBuffer, uint16_t aLength)
     }
     else
     {
+        LogWarn("@@@ 10-6");
         LogWarn("Unexpected Spinel transaction message: %u", SPINEL_HEADER_GET_TID(header));
         error = OT_ERROR_DROP;
     }
 
 exit:
+    LogWarn("@@@ 10-7 error=%d", (int) error);
     UpdateParseErrorCount(error);
     LogIfFail("Error processing response", error);
 }
@@ -775,26 +789,31 @@ void RadioSpinel::TransmitDone(otRadioFrame *aFrame, otRadioFrame *aAckFrame, ot
 #if OPENTHREAD_CONFIG_DIAG_ENABLE
     if (otPlatDiagModeGet())
     {
+        LogWarn("@@@ 12-2a");
         mCallbacks.mDiagTransmitDone(mInstance, aFrame, aError);
     }
     else
 #endif
     {
+        LogWarn("@@@ 12-2b");
         mCallbacks.mTransmitDone(mInstance, aFrame, aAckFrame, aError);
     }
 }
 
 void RadioSpinel::ProcessRadioStateMachine(void)
 {
+    LogWarn("@@@ 12-0");
     if (mState == kStateTransmitDone)
     {
         mState        = kStateReceive;
         mTxRadioEndUs = UINT64_MAX;
 
+        LogWarn("@@@ 12-1");
         TransmitDone(mTransmitFrame, (mAckRadioFrame.mLength != 0) ? &mAckRadioFrame : nullptr, mTxError);
     }
     else if (mState == kStateTransmitting && otPlatTimeGet() >= mTxRadioEndUs)
     {
+        LogWarn("@@@ 12-2");
         // Frame has been successfully passed to radio, but no `TransmitDone` event received within kTxWaitUs.
         LogWarn("radio tx timeout");
         HandleRcpTimeout();
@@ -805,6 +824,7 @@ void RadioSpinel::Process(const void *aContext)
 {
     OT_UNUSED_VARIABLE(aContext);
 
+    LogWarn("@@@ 13-0");
     ProcessRadioStateMachine();
     RecoverFromRcpFailure();
 
@@ -1544,6 +1564,90 @@ otError RadioSpinel::RequestWithExpectedCommandV(uint32_t          aExpectedComm
     return error;
 }
 
+void hexdump(char *dst, size_t dstSz,  const uint8_t *data, int len) {
+    size_t sz = dstSz;
+    char *d = dst;
+    const int cols = 16;
+    for (int i = 0; i < len; i += cols) {
+        for (int j = 0; j < cols && i + j < len; j += 1) {
+            int written = snprintf(d, sz, "%02x", data[i + j]);
+            d += written;
+            sz -= written;
+            if (j < cols - 1) {
+                written = snprintf(d, sz, " ");
+                d += written;
+                sz -= written;
+            }
+        }
+
+        int written = snprintf(d, sz, "\r\n");
+        d += written;
+        sz -= written;
+    }
+}
+
+void dumpRadioFrame(char *dst, size_t dstSz, const otRadioFrame& frame) {
+    char *d = dst;
+    size_t sz = dstSz;
+
+    size_t written = snprintf(d, sz, "@@@ xframedump mLength=%d", (int)frame.mLength);
+    d += written;
+    sz -= written;
+
+    written = snprintf(d, sz, " mTimestamp=%llu", (unsigned long long)frame.mInfo.mRxInfo.mTimestamp);
+    d += written;
+    sz -= written;
+
+    written = snprintf(d, sz, " mRssi=%d", (int)frame.mInfo.mRxInfo.mRssi);
+    d += written;
+    sz -= written;
+
+    written = snprintf(d, sz, " mLqi=%d", (int)frame.mInfo.mRxInfo.mLqi);
+    d += written;
+    sz -= written;
+
+    written = snprintf(d, sz, " mAckFrameCounter=%d", (int)frame.mInfo.mRxInfo.mAckFrameCounter);
+    d += written;
+    sz -= written;
+
+    written = snprintf(d, sz, " mAckKeyId=%d", (int)frame.mInfo.mRxInfo.mAckKeyId);
+    d += written;
+    sz -= written;
+
+    written = snprintf(d, sz, " mAckedWithFramePending=%d", (int)frame.mInfo.mRxInfo.mAckedWithFramePending);
+    d += written;
+    sz -= written;
+
+    written = snprintf(d, sz, " mAckedWithSecEnhAck=%d", (int)frame.mInfo.mRxInfo.mAckedWithSecEnhAck);
+    d += written;
+    sz -= written;
+
+    // dump mPsdu
+    written = snprintf(d, sz, " mPsdu =\r\n");
+    d += written;
+    sz -= written;
+    const int cols = 16;
+    const int len = frame.mLength;
+    for (int i = 0; i < len; i += cols) {
+        for (int j = 0; j < cols && i + j < len; j += 1) {
+            written = snprintf(d, sz, "%02x", frame.mPsdu[i + j]);
+            d += written;
+            sz -= written;
+            if (j < cols - 1) {
+                written = snprintf(d, sz, " ");
+                d += written;
+                sz -= written;
+            }
+        }
+
+        written = snprintf(d, sz, "\r\n");
+        d += written;
+        sz -= written;
+    }
+
+    snprintf(d, sz, "\r\n@@@ dumpend");
+}
+
 void RadioSpinel::HandleTransmitDone(uint32_t          aCommand,
                                      spinel_prop_key_t aKey,
                                      const uint8_t    *aBuffer,
@@ -1555,40 +1659,53 @@ void RadioSpinel::HandleTransmitDone(uint32_t          aCommand,
     bool            headerUpdated = false;
     spinel_ssize_t  unpacked;
 
+    LogWarn("@@@ 11-1");
     VerifyOrExit(aCommand == SPINEL_CMD_PROP_VALUE_IS && aKey == SPINEL_PROP_LAST_STATUS, error = OT_ERROR_FAILED);
+    LogWarn("@@@ 11-2");
 
     unpacked = spinel_datatype_unpack(aBuffer, aLength, SPINEL_DATATYPE_UINT_PACKED_S, &status);
     VerifyOrExit(unpacked > 0, error = OT_ERROR_PARSE);
+    LogWarn("@@@ 11-3");
 
     aBuffer += unpacked;
     aLength -= static_cast<uint16_t>(unpacked);
 
     unpacked = spinel_datatype_unpack(aBuffer, aLength, SPINEL_DATATYPE_BOOL_S, &framePending);
     VerifyOrExit(unpacked > 0, error = OT_ERROR_PARSE);
+    LogWarn("@@@ 11-4");
 
     aBuffer += unpacked;
     aLength -= static_cast<uint16_t>(unpacked);
 
     unpacked = spinel_datatype_unpack(aBuffer, aLength, SPINEL_DATATYPE_BOOL_S, &headerUpdated);
     VerifyOrExit(unpacked > 0, error = OT_ERROR_PARSE);
+    LogWarn("@@@ 11-5");
 
     aBuffer += unpacked;
     aLength -= static_cast<uint16_t>(unpacked);
 
     if (status == SPINEL_STATUS_OK)
     {
+        LogWarn("@@@ 11-6 aLength=%d", (int)aLength);
         SuccessOrExit(error = ParseRadioFrame(mAckRadioFrame, aBuffer, aLength, unpacked));
+        static char dst[1000];
+        dumpRadioFrame(dst, sizeof(dst), mAckRadioFrame);
+        LogWarn("@@@ 11-7 %s", dst);
+        hexdump(dst, sizeof(dst), aBuffer, aLength);
+        LogWarn("@@@ 11-7b %s", dst);
         aBuffer += unpacked;
         aLength -= static_cast<uint16_t>(unpacked);
     }
     else
     {
+        LogWarn("@@@ 11-8");
         error = SpinelStatusToOtError(status);
     }
 
     if ((sRadioCaps & OT_RADIO_CAPS_TRANSMIT_SEC) && (!mTransmitFrame->mInfo.mTxInfo.mIsHeaderUpdated) &&
         headerUpdated && static_cast<Mac::TxFrame *>(mTransmitFrame)->GetSecurityEnabled())
     {
+        LogWarn("@@@ 11-9");
         uint8_t  keyId;
         uint32_t frameCounter;
 
@@ -1598,6 +1715,8 @@ void RadioSpinel::HandleTransmitDone(uint32_t          aCommand,
         VerifyOrExit(unpacked > 0, error = OT_ERROR_PARSE);
         static_cast<Mac::TxFrame *>(mTransmitFrame)->SetKeyId(keyId);
         static_cast<Mac::TxFrame *>(mTransmitFrame)->SetFrameCounter(frameCounter);
+        bool withCsl = static_cast<Mac::TxFrame *>(mTransmitFrame)->GetCslIe() != nullptr;
+        LogWarn("@@@ 11-10 withCslIe=%d", (int)withCsl);
 
 #if OPENTHREAD_SPINEL_CONFIG_RCP_RESTORATION_MAX_COUNT > 0
         mMacFrameCounterSet = true;
@@ -1607,6 +1726,7 @@ void RadioSpinel::HandleTransmitDone(uint32_t          aCommand,
     static_cast<Mac::TxFrame *>(mTransmitFrame)->SetIsHeaderUpdated(headerUpdated);
 
 exit:
+    LogWarn("@@@ 11-11 error=%d",(int)error);
     // A parse error indicates an RCP misbehavior, so recover the RCP immediately.
     mState = kStateTransmitDone;
     if (error != OT_ERROR_PARSE)
@@ -1619,6 +1739,7 @@ exit:
         HandleRcpTimeout();
         RecoverFromRcpFailure();
     }
+
     UpdateParseErrorCount(error);
     LogIfFail("Handle transmit done failed", error);
 }
@@ -2154,10 +2275,12 @@ void RadioSpinel::HandleReceivedFrame(const uint8_t *aFrame, uint16_t aLength, u
 {
     if (SPINEL_HEADER_GET_TID(aHeader) == 0)
     {
+        LogWarn("@@@ 8-1");
         HandleNotification(aFrame, aLength, aShouldSaveFrame);
     }
     else
     {
+        LogWarn("@@@ 8-2");
         HandleResponse(aFrame, aLength);
         aShouldSaveFrame = false;
     }

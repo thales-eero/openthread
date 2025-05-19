@@ -82,6 +82,8 @@ exit:
 
 extern "C" void otPlatRadioTxDone(otInstance *aInstance, otRadioFrame *aFrame, otRadioFrame *aAckFrame, otError aError)
 {
+    printf("@@@ 12-3a\n");
+    otPlatLog(OT_LOG_LEVEL_CRIT, OT_LOG_REGION_PLATFORM, "@@@ 12-3b\n");
     Instance     &instance = AsCoreType(aInstance);
     Mac::TxFrame &txFrame  = *static_cast<Mac::TxFrame *>(aFrame);
     Mac::RxFrame *ackFrame = static_cast<Mac::RxFrame *>(aAckFrame);

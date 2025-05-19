@@ -89,7 +89,7 @@ public:
      * Initializes the object with default Key Rotation Time
      * and Security Policy Flags.
      */
-    SecurityPolicy(void) { SetToDefault(); }
+    SecurityPolicy(void) : otSecurityPolicy() { SetToDefault(); }
 
     /**
      * Sets the Security Policy to default values.

@@ -1288,9 +1288,45 @@ exit:
     return;
 }
 
+void dumpRadioFrame(char *dst, size_t dstSz, const otRadioFrame& frame) {
+    char *d = dst;
+    size_t sz = dstSz;
+
+    size_t written = snprintf(d, sz, "@@@ framedump");
+    d += written;
+    sz -= written;
+
+    // dump mPsdu
+    written = snprintf(d, sz, "\r\nmPsdu =\r\n");
+    d += written;
+    sz -= written;
+    const int cols = 16;
+    const int len = frame.mLength;
+    for (int i = 0; i < len; i += cols) {
+        for (int j = 0; j < cols && i + j < len; j += 1) {
+            written = snprintf(d, sz, "%02x", frame.mPsdu[i + j]);
+            d += written;
+            sz -= written;
+            if (j < cols - 1) {
+                written = snprintf(d, sz, " ");
+                d += written;
+                sz -= written;
+            }
+        }
+
+        written = snprintf(d, sz, "\r\n");
+        d += written;
+        sz -= written;
+    }
+
+    snprintf(d, sz, "\r\n@@@ dumpend");
+}
+
 void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
 {
+    LogWarn("@@@ 1-1");
     bool ackRequested = aFrame.GetAckRequest();
+    LogWarn("@@@ 1-2 ackRequested=%d", (int)ackRequested);
 
 #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
     if (!aFrame.IsEmpty()
@@ -1299,6 +1335,7 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
 #endif
     )
     {
+        LogWarn("@@@ 1-3");
         Address dstAddr;
 
         IgnoreError(aFrame.GetDstAddr(dstAddr));
@@ -1306,6 +1343,7 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
         // Determine whether to re-transmit a broadcast frame.
         if (dstAddr.IsBroadcast())
         {
+            LogWarn("@@@ 1-4");
             mBroadcastTransmitCount++;
 
             if (mBroadcastTransmitCount < kTxNumBcast)
@@ -1319,6 +1357,7 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
 #else
                 mLinks.Send();
 #endif
+                LogWarn("@@@ 1-5");
                 ExitNow();
             }
 
@@ -1327,12 +1366,14 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
 
         if (ackRequested && (aAckFrame != nullptr))
         {
+            LogWarn("@@@ 1-6");
             Neighbor *neighbor = Get<NeighborTable>().FindNeighbor(dstAddr);
 
 #if OPENTHREAD_CONFIG_MAC_FILTER_ENABLE
             if ((aError == kErrorNone) && (neighbor != nullptr) &&
                 (mFilter.ApplyToRxFrame(*aAckFrame, neighbor->GetExtAddress(), neighbor) != kErrorNone))
             {
+                LogWarn("@@@ 1-7a");
                 aError = kErrorNoAck;
             }
 #endif
@@ -1341,23 +1382,38 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
             // Verify Enh-ACK integrity by checking its MIC
             if ((aError == kErrorNone) && (ProcessEnhAckSecurity(aFrame, *aAckFrame) != kErrorNone))
             {
+                LogWarn("@@@ 1-7b");
                 aError = kErrorNoAck;
             }
 #endif
 
             if ((aError == kErrorNone) && (neighbor != nullptr))
             {
+                LogWarn("@@@ 1-8");
                 UpdateNeighborLinkInfo(*neighbor, *aAckFrame);
 
 #if OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE
+                LogWarn("@@@ 1-9");
                 ProcessEnhAckProbing(*aAckFrame, *neighbor);
 #endif
 #if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+                LogWarn(
+                    "@@@ 1-10 HandleTransmitDone aAckFrame=%s dstAddr=%s",
+                    aAckFrame->ToInfoString().AsCString(),
+                    dstAddr.ToString().AsCString()
+                );
+                char framedump[1000];
+                framedump[sizeof(framedump) - 1] = 0;
+                dumpRadioFrame(framedump, sizeof(framedump) - 1, *aAckFrame);
+                LogWarn("%s", framedump);
                 ProcessCsl(*aAckFrame, dstAddr);
+#else
+#error "OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE is disabled"
 #endif
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
                 if (!mRxOnWhenIdle && aFrame.HasCslIe())
                 {
+                    LogWarn("@@@ 1-11");
                     Get<DataPollSender>().ResetKeepAliveTimer();
                 }
 #endif
@@ -1367,8 +1423,10 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
 #endif // OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
 
 #if OPENTHREAD_CONFIG_MULTI_RADIO
+
     if (!aFrame.IsEmpty())
     {
+        LogWarn("@@@ 1-13");
         RadioType  radio          = aFrame.GetRadioType();
         RadioTypes requiredRadios = mLinks.GetTxFrames().GetRequiredRadioTypes();
 
@@ -1376,6 +1434,7 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
 
         if (requiredRadios.IsEmpty())
         {
+            LogWarn("@@@ 1-14");
             // If the "required radio type set" is empty, successful
             // tx over any radio link is sufficient for overall tx to
             // be considered successful. In this case `mTxError`
@@ -1384,11 +1443,13 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
 
             if (mTxError != kErrorNone)
             {
+                LogWarn("@@@ 1-15");
                 mTxError = aError;
             }
         }
         else
         {
+            LogWarn("@@@ 1-16");
             // When the "required radio type set" is not empty we
             // expect the successful frame tx on all links in this set
             // to consider the overall tx successful. In this case,
@@ -1397,6 +1458,7 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
 
             if (requiredRadios.Contains(radio) && (aError != kErrorNone))
             {
+                LogWarn("@@@ 1-17");
                 LogDebg("Frame tx failed on required radio link %s with error %s", RadioTypeToString(radio),
                         ErrorToString(aError));
 
@@ -1408,7 +1470,9 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
         // and wait for all radio links to finish.
         mTxPendingRadioLinks.Remove(radio);
 
+        LogWarn("@@@ 1-18");
         VerifyOrExit(mTxPendingRadioLinks.IsEmpty());
+        LogWarn("@@@ 1-19 mTxError=%d", (int)mTxError);
 
         aError = mTxError;
     }
@@ -1416,20 +1480,24 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
 
     // Determine next action based on current operation.
 
+    LogWarn("@@@ 1-20");
     switch (mOperation)
     {
     case kOperationActiveScan:
+        LogWarn("@@@ 1-21");
         mCounters.mTxBeaconRequest++;
         mTimer.Start(mScanDuration);
         break;
 
     case kOperationTransmitBeacon:
+        LogWarn("@@@ 1-22");
         mCounters.mTxBeacon++;
         FinishOperation();
         PerformNextOperation();
         break;
 
     case kOperationTransmitPoll:
+        LogWarn("@@@ 1-23");
         OT_ASSERT(aFrame.IsEmpty() || ackRequested);
 
         if ((aError == kErrorNone) && (aAckFrame != nullptr))
@@ -1451,6 +1519,7 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
         break;
 
     case kOperationTransmitDataDirect:
+        LogWarn("@@@ 1-24");
         mCounters.mTxData++;
 
         if (aError != kErrorNone)
@@ -1475,6 +1544,7 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
 
 #if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     case kOperationTransmitDataCsl:
+        LogWarn("@@@ 1-25");
         mCounters.mTxData++;
 
         DumpDebg("TX", aFrame.GetHeader(), aFrame.GetLength());
@@ -1487,6 +1557,7 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
 
 #if OPENTHREAD_FTD
     case kOperationTransmitDataIndirect:
+        LogWarn("@@@ 1-26");
         mCounters.mTxData++;
 
         if (aError != kErrorNone)
@@ -1509,6 +1580,7 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
 
 #if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
     case kOperationTransmitWakeup:
+        LogWarn("@@@ 1-27");
         FinishOperation();
         PerformNextOperation();
         break;
@@ -1733,21 +1805,28 @@ Error Mac::ProcessEnhAckSecurity(TxFrame &aTxFrame, RxFrame &aAckFrame)
     KeyManager        &keyManager = Get<KeyManager>();
     const KeyMaterial *macKey;
 
+    LogWarn("@@@ 5-1");
     VerifyOrExit(aAckFrame.GetSecurityEnabled(), error = kErrorNone);
+    LogWarn("@@@ 5-2");
     VerifyOrExit(aAckFrame.IsVersion2015());
 
+    LogWarn("@@@ 5-3");
     SuccessOrExit(aAckFrame.ValidatePsdu());
 
+    LogWarn("@@@ 5-4");
     IgnoreError(aAckFrame.GetSecurityLevel(securityLevel));
     VerifyOrExit(securityLevel == Frame::kSecurityEncMic32);
+    LogWarn("@@@ 5-5");
 
     IgnoreError(aAckFrame.GetKeyIdMode(keyIdMode));
     VerifyOrExit(keyIdMode == Frame::kKeyIdMode1);
+    LogWarn("@@@ 5-6");
 
     IgnoreError(aTxFrame.GetKeyId(txKeyId));
     IgnoreError(aAckFrame.GetKeyId(ackKeyId));
 
     VerifyOrExit(txKeyId == ackKeyId);
+    LogWarn("@@@ 5-7");
 
     IgnoreError(aAckFrame.GetFrameCounter(frameCounter));
     LogDebg("Rx security - Ack frame counter %lu", ToUlong(frameCounter));
@@ -1756,14 +1835,17 @@ Error Mac::ProcessEnhAckSecurity(TxFrame &aTxFrame, RxFrame &aAckFrame)
 
     if (!srcAddr.IsNone())
     {
+        LogWarn("@@@ 5-8");
         neighbor = Get<NeighborTable>().FindNeighbor(srcAddr);
     }
     else
     {
+        LogWarn("@@@ 5-9");
         IgnoreError(aTxFrame.GetDstAddr(dstAddr));
 
         if (!dstAddr.IsNone())
         {
+            LogWarn("@@@ 5-10");
             // Get neighbor from destination address of transmitted frame
             neighbor = Get<NeighborTable>().FindNeighbor(dstAddr);
         }
@@ -1771,49 +1853,61 @@ Error Mac::ProcessEnhAckSecurity(TxFrame &aTxFrame, RxFrame &aAckFrame)
 
     if (!srcAddr.IsExtended() && neighbor != nullptr)
     {
+        LogWarn("@@@ 5-11");
         srcAddr.SetExtended(neighbor->GetExtAddress());
     }
 
     VerifyOrExit(srcAddr.IsExtended() && neighbor != nullptr);
+    LogWarn("@@@ 5-12");
 
     ackKeyId--;
 
     if (ackKeyId == (keyManager.GetCurrentKeySequence() & 0x7f))
     {
+        LogWarn("@@@ 5-13");
         macKey = &mLinks.GetSubMac().GetCurrentMacKey();
     }
     else if (ackKeyId == ((keyManager.GetCurrentKeySequence() - 1) & 0x7f))
     {
+        LogWarn("@@@ 5-14");
         macKey = &mLinks.GetSubMac().GetPreviousMacKey();
     }
     else if (ackKeyId == ((keyManager.GetCurrentKeySequence() + 1) & 0x7f))
     {
+        LogWarn("@@@ 5-15");
         macKey = &mLinks.GetSubMac().GetNextMacKey();
     }
     else
     {
+        LogWarn("@@@ 5-16");
         ExitNow();
     }
 
+    LogWarn("@@@ 5-17");
     if (neighbor->IsStateValid())
     {
+        LogWarn("@@@ 5-18");
         VerifyOrExit(frameCounter >= neighbor->GetLinkAckFrameCounter());
     }
 
     error = aAckFrame.ProcessReceiveAesCcm(srcAddr.GetExtended(), *macKey);
     SuccessOrExit(error);
+    LogWarn("@@@ 5-19");
 
     if (neighbor->IsStateValid())
     {
+        LogWarn("@@@ 5-20");
         neighbor->SetLinkAckFrameCounter(frameCounter + 1);
     }
 
 exit:
     if (error != kErrorNone)
     {
+        LogWarn("@@@ 5-21");
         LogInfo("Frame tx attempt failed, error: Enh-ACK security check fail");
     }
 
+    LogWarn("@@@ 5-22 error=%d", (int)error);
     return error;
 }
 #endif // OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2
@@ -1964,7 +2058,18 @@ void Mac::HandleReceivedFrame(RxFrame *aFrame, Error aError)
     }
 
 #if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+    LogWarn(
+        "@@@ 2 HandleReceivedFrame aFrame=%s srcaddr=%s",
+        aFrame->ToInfoString().AsCString(),
+        srcaddr.ToString().AsCString()
+    );
+    char framedump[1000];
+    framedump[sizeof(framedump) - 1] = 0;
+    dumpRadioFrame(framedump, sizeof(framedump) - 1, *aFrame);
+    LogWarn("%s", framedump);
     ProcessCsl(*aFrame, srcaddr);
+#else
+#error "OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE is disabled"
 #endif
 
     Get<DataPollSender>().ProcessRxFrame(*aFrame);
@@ -2496,13 +2601,16 @@ bool Mac::IsCslSupported(void) const
 
 void Mac::ProcessCsl(const RxFrame &aFrame, const Address &aSrcAddr)
 {
+    LogWarn("@@@ 3-1");
     CslNeighbor *neighbor = nullptr;
     const CslIe *csl;
 
     VerifyOrExit(aFrame.IsVersion2015() && aFrame.GetSecurityEnabled());
+    LogWarn("@@@ 3-2");
 
     csl = aFrame.GetCslIe();
     VerifyOrExit(csl != nullptr);
+    LogWarn("@@@ 3-3");
 
 #if OPENTHREAD_FTD
     neighbor = Get<ChildTable>().FindChild(aSrcAddr, Child::kInStateAnyExceptInvalid);
@@ -2511,15 +2619,17 @@ void Mac::ProcessCsl(const RxFrame &aFrame, const Address &aSrcAddr)
 #endif
 
     VerifyOrExit(neighbor != nullptr);
+    LogWarn("@@@ 3-4");
 
     VerifyOrExit(csl->GetPeriod() >= kMinCslIePeriod);
+    LogWarn("@@@ 3-5");
 
     neighbor->SetCslPeriod(csl->GetPeriod());
     neighbor->SetCslPhase(csl->GetPhase());
     neighbor->SetCslSynchronized(true);
     neighbor->SetCslLastHeard(TimerMilli::GetNow());
     neighbor->SetLastRxTimestamp(aFrame.GetTimestamp());
-    LogDebg("Timestamp=%lu Sequence=%u CslPeriod=%u CslPhase=%u TransmitPhase=%u",
+    LogWarn("@@@ 3-6 ProcessCsl Timestamp=%lu Sequence=%u CslPeriod=%u CslPhase=%u TransmitPhase=%u",
             ToUlong(static_cast<uint32_t>(aFrame.GetTimestamp())), aFrame.GetSequence(), csl->GetPeriod(),
             csl->GetPhase(), neighbor->GetCslPhase());
 

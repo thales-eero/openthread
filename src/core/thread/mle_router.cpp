@@ -1685,9 +1685,16 @@ void MleRouter::HandleTimeTick(void)
         }
 
 #if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+        auto now = TimerMilli::GetNow();
         if (child.IsCslSynchronized() &&
-            TimerMilli::GetNow() - child.GetCslLastHeard() >= Time::SecToMsec(child.GetCslTimeout()))
+            now - child.GetCslLastHeard() >= Time::SecToMsec(child.GetCslTimeout()))
         {
+            LogWarn("@@@ 4 HandleTimeTick now=%llu lastHeard=%llu cslTimeout=%llu",
+                (unsigned long long) now.GetValue(),
+                (unsigned long long) child.GetCslLastHeard().GetValue(),
+                (unsigned long long) Time::SecToMsec(child.GetCslTimeout())
+            );
+
             LogInfo("Child 0x%04x CSL synchronization expired", child.GetRloc16());
             child.SetCslSynchronized(false);
             Get<CslTxScheduler>().Update();
