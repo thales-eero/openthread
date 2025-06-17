@@ -122,6 +122,32 @@ uint32_t Logger::Snprintf(char *aDest, uint32_t aSize, const char *aFormat, ...)
 
 void Logger::LogSpinelFrame(const uint8_t *aFrame, uint16_t aLength, bool aTx)
 {
+    {
+        static char dst[1000];
+        char *d = dst;
+        size_t sz = sizeof(dst);
+
+        const int cols = 16;
+        const int len = aLength;
+        for (int i = 0; i < len; i += cols) {
+            for (int j = 0; j < cols && i + j < len; j += 1) {
+                written = snprintf(d, sz, "%02x", aFrame[i + j]);
+                d += written;
+                sz -= written;
+                if (j < cols - 1) {
+                    written = snprintf(d, sz, " ");
+                    d += written;
+                    sz -= written;
+                }
+            }
+
+            written = snprintf(d, sz, "\r\n");
+            d += written;
+            sz -= written;
+        }
+        LogWarn("[spin %s spin]", dst);
+    }
+
     otError           error                                   = OT_ERROR_NONE;
     char              buf[OPENTHREAD_LIB_SPINEL_LOG_MAX_SIZE] = {0};
     spinel_ssize_t    unpacked;
