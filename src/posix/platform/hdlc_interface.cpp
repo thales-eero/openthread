@@ -148,29 +148,43 @@ otError HdlcInterface::Init(ReceiveFrameCallback aCallback, void *aCallbackConte
     otError     error = OT_ERROR_NONE;
     struct stat st;
 
+    LogCrit("@@@ 1");
     VerifyOrExit(mSockFd == -1, error = OT_ERROR_ALREADY);
 
+    LogCrit("@@@ 2");
     VerifyOrDie(stat(mRadioUrl.GetPath(), &st) == 0, OT_EXIT_ERROR_ERRNO);
 
+    LogCrit("@@@ 3");
     if (S_ISCHR(st.st_mode))
     {
+        LogCrit("@@@ 4");
         mSockFd = OpenFile(mRadioUrl);
+        LogCrit("@@@ 5");
         VerifyOrExit(mSockFd != -1, error = OT_ERROR_FAILED);
+        LogCrit("@@@ 6");
     }
 #if OPENTHREAD_POSIX_CONFIG_RCP_PTY_ENABLE
     else if (S_ISREG(st.st_mode))
     {
+        LogCrit("@@@ 7");
         mSockFd = ForkPty(mRadioUrl);
+        LogCrit("@@@ 8");
         VerifyOrExit(mSockFd != -1, error = OT_ERROR_FAILED);
+        LogCrit("@@@ 9");
     }
 #endif // OPENTHREAD_POSIX_CONFIG_RCP_PTY_ENABLE
     else
     {
+        LogCrit("@@@ 10");
         LogCrit("Radio file '%s' not supported", mRadioUrl.GetPath());
+        LogCrit("@@@ 11");
         ExitNow(error = OT_ERROR_FAILED);
+        LogCrit("@@@ 12");
     }
 
+    LogCrit("@@@ 13");
     mHdlcDecoder.Init(aFrameBuffer, HandleHdlcFrame, this);
+    LogCrit("@@@ 14");
     mReceiveFrameCallback = aCallback;
     mReceiveFrameContext  = aCallbackContext;
     mReceiveFrameBuffer   = &aFrameBuffer;
@@ -452,15 +466,19 @@ int HdlcInterface::OpenFile(const Url::Url &aRadioUrl)
     int fd   = -1;
     int rval = 0;
 
+    LogCrit("@@@ 4.1");
     fd = open(aRadioUrl.GetPath(), O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
+    LogCrit("@@@ 4.2");
     if (fd == -1)
     {
+        LogCrit("@@@ 4.3");
         perror("open uart failed");
         ExitNow();
     }
 
     if (isatty(fd))
     {
+        LogCrit("@@@ 4.4");
         struct termios tios;
         const char    *value;
         speed_t        speed;
@@ -468,6 +486,7 @@ int HdlcInterface::OpenFile(const Url::Url &aRadioUrl)
         uint32_t       baudrate = 115200;
 
         VerifyOrExit((rval = tcgetattr(fd, &tios)) == 0);
+        LogCrit("@@@ 4.5");
 
         cfmakeraw(&tios);
 
@@ -475,133 +494,164 @@ int HdlcInterface::OpenFile(const Url::Url &aRadioUrl)
 
         if ((value = aRadioUrl.GetValue("uart-parity")) != nullptr)
         {
+            LogCrit("@@@ 4.6");
             if (strncmp(value, "odd", 3) == 0)
             {
+                LogCrit("@@@ 4.7");
                 tios.c_cflag |= PARENB;
                 tios.c_cflag |= PARODD;
             }
             else if (strncmp(value, "even", 4) == 0)
             {
+                LogCrit("@@@ 4.8");
                 tios.c_cflag |= PARENB;
             }
             else
             {
+                LogCrit("@@@ 4.9");
                 DieNow(OT_EXIT_INVALID_ARGUMENTS);
             }
         }
 
+        LogCrit("@@@ 4.10");
         IgnoreError(aRadioUrl.ParseUint8("uart-stop", stopBit));
 
         switch (stopBit)
         {
         case 1:
+            LogCrit("@@@ 4.11");
             tios.c_cflag &= static_cast<unsigned long>(~CSTOPB);
             break;
         case 2:
+            LogCrit("@@@ 4.12");
             tios.c_cflag |= CSTOPB;
             break;
         default:
+            LogCrit("@@@ 4.13");
             DieNow(OT_EXIT_INVALID_ARGUMENTS);
             break;
         }
 
+        LogCrit("@@@ 4.14");
         IgnoreError(aRadioUrl.ParseUint32("uart-baudrate", baudrate));
 
         switch (baudrate)
         {
         case 9600:
+            LogCrit("@@@ 4.15");
             speed = B9600;
             break;
         case 19200:
+            LogCrit("@@@ 4.16");
             speed = B19200;
             break;
         case 38400:
+            LogCrit("@@@ 4.17");
             speed = B38400;
             break;
         case 57600:
+            LogCrit("@@@ 4.18");
             speed = B57600;
             break;
         case 115200:
+            LogCrit("@@@ 4.19");
             speed = B115200;
             break;
 #ifdef B230400
         case 230400:
+            LogCrit("@@@ 4.20");
             speed = B230400;
             break;
 #endif
 #ifdef B460800
         case 460800:
+            LogCrit("@@@ 4.21");
             speed = B460800;
             break;
 #endif
 #ifdef B500000
         case 500000:
+            LogCrit("@@@ 4.22");
             speed = B500000;
             break;
 #endif
 #ifdef B576000
         case 576000:
+            LogCrit("@@@ 4.23");
             speed = B576000;
             break;
 #endif
 #ifdef B921600
         case 921600:
+            LogCrit("@@@ 4.24");
             speed = B921600;
             break;
 #endif
 #ifdef B1000000
         case 1000000:
+            LogCrit("@@@ 4.25");
             speed = B1000000;
             break;
 #endif
 #ifdef B1152000
         case 1152000:
+            LogCrit("@@@ 4.26");
             speed = B1152000;
             break;
 #endif
 #ifdef B1500000
         case 1500000:
+            LogCrit("@@@ 4.27");
             speed = B1500000;
             break;
 #endif
 #ifdef B2000000
         case 2000000:
+            LogCrit("@@@ 4.28");
             speed = B2000000;
             break;
 #endif
 #ifdef B2500000
         case 2500000:
+            LogCrit("@@@ 4.29");
             speed = B2500000;
             break;
 #endif
 #ifdef B3000000
         case 3000000:
+            LogCrit("@@@ 4.30");
             speed = B3000000;
             break;
 #endif
 #ifdef B3500000
         case 3500000:
+            LogCrit("@@@ 4.31");
             speed = B3500000;
             break;
 #endif
 #ifdef B4000000
         case 4000000:
+            LogCrit("@@@ 4.32");
             speed = B4000000;
             break;
 #endif
         default:
+            LogCrit("@@@ 4.33");
             DieNow(OT_EXIT_INVALID_ARGUMENTS);
             break;
         }
 
+        LogCrit("@@@ 4.33");
         mBaudRate = baudrate;
 
         if (aRadioUrl.HasParam("uart-flow-control"))
         {
+            LogCrit("@@@ 4.34");
             tios.c_cflag |= CRTSCTS;
         }
         else if (aRadioUrl.HasParam("uart-init-deassert"))
         {
+            LogCrit("@@@ 4.35");
             // When flow control is disabled, deassert DTR and RTS on init
 #ifndef __APPLE__
             int flags;
@@ -613,10 +663,13 @@ int HdlcInterface::OpenFile(const Url::Url &aRadioUrl)
             // Deassert DTR and RTS
             flags = TIOCM_DTR | TIOCM_RTS;
             VerifyOrExit(ioctl(fd, TIOCMBIC, &flags) != -1, perror("tiocmbic"));
+            LogCrit("@@@ 4.36");
 #endif
         }
 
+        LogCrit("@@@ 4.37");
         VerifyOrExit((rval = cfsetspeed(&tios, static_cast<speed_t>(speed))) == 0, perror("cfsetspeed"));
+        LogCrit("@@@ 4.38");
         rval = tcsetattr(fd, TCSANOW, &tios);
 
 #ifdef __APPLE__
@@ -632,15 +685,19 @@ int HdlcInterface::OpenFile(const Url::Url &aRadioUrl)
 #else  // __APPLE__
         VerifyOrExit(rval == 0, perror("tcsetattr"));
 #endif // __APPLE__
+        LogCrit("@@@ 4.39");
         VerifyOrExit((rval = tcflush(fd, TCIOFLUSH)) == 0);
+        LogCrit("@@@ 4.40");
     }
 
 exit:
     if (rval != 0)
     {
+        LogCrit("@@@ 4.41");
         DieNow(OT_EXIT_FAILURE);
     }
 
+    LogCrit("@@@ 4.42");
     return fd;
 }
 
